@@ -1,0 +1,170 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  html_notebook: default
+  html_document: default
+---
+
+**Principles of Data Visualization and Introduction to ggplot2**
+
+I have provided you with data about the 5,000 fastest growing companies in the US, as compiled by Inc. magazine. lets read this in:
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+```
+
+
+
+```{r}
+
+inc <- read.csv("https://raw.githubusercontent.com/charleyferrari/CUNY_DATA_608/master/module1/Data/inc5000_data.csv", header= TRUE)
+
+```
+
+And lets preview this data:
+
+```{r}
+
+head(inc)
+
+```
+
+
+```{r}
+
+summary(inc)
+
+```
+
+Think a bit on what these summaries mean. Use the space below to add some more relevant non-visual exploratory information you think helps you understand this data:
+
+```{r}
+# Looking at the structure of the dataset 
+
+str(inc)
+
+```
+
+## Question 1
+
+Create a graph that shows the distribution of companies in the dataset by State (ie how many are in each state). There are a lot of States, so consider which axis you should use. This visualization is ultimately going to be consumed on a 'portrait' oriented screen (ie taller than wide), which should further guide your layout choices.
+
+## Answer 1 - Option 1
+
+```{r fig1, fig.height=10, fig.width= 15, fig.align='center'}
+
+# Frequency of each state in the dataframe
+state_inc <- inc %>% 
+  group_by(State) %>%
+  summarize(Freq=n()) %>%
+  arrange(desc(Freq))
+
+# create a barplot of the new dataframe
+theme_set(theme_classic())
+ggplot(state_inc, aes(x=reorder(State, -Freq), y=Freq))+
+  geom_bar(stat="identity", width=0.5, fill="tomato2")+
+  coord_flip()+
+  labs(title="Distribution of Companies by State")+
+  xlab("Number of Companies")+
+  ylab("State")+
+  theme(axis.text.x=element_text(vjust=0.6))
+
+```
+
+## Answer 1 Option 2
+
+```{r fig2, fig.height=10, fig.width= 15, fig.align='center'}
+#create a barplot as option 2
+ggplot(inc, aes(State))+
+  geom_bar(aes(fill=Industry), width=0.5)+
+  coord_flip()+ # unfortunately i couldnt get the flip work (also couldnt get the reorder work in this case)
+  theme(axis.text.x = element_text(vjust=05))
+
+```
+
+## Quesiton 2
+
+Lets dig in on the state with the 3rd most companies in the data set. Imagine you work for the state and are interested in how many people are employed by companies in different industries. Create a plot that shows the average and/or median employment by industry for companies in this state (only use cases with full data, use R's `complete.cases()` function.) In addition to this, your graph should show how variable the ranges are, and you should deal with outliers.
+
+## Answer 2 Option 1
+
+```{r fig3, fig.height=15, fig.width= 20, fig.align='center'}
+
+# Filter the third state(NY)
+ny <- inc %>%
+  filter(State=="NY")
+
+# Use complete.cases() for full available data
+ny <- ny[complete.cases(ny), ]
+
+# group by industry and mean of employees
+ny <- ny %>%
+  group_by(Industry) %>%
+  summarize(avgemp=mean(Employees, na.rm = TRUE))
+
+# create a bar plot 
+theme_set(theme_classic())
+ggplot(ny, aes(x=reorder(Industry, -avgemp), y=avgemp))+
+  geom_bar(stat="identity", width=0.5, fill="Blue")+
+  coord_flip()+
+  labs(title="New York Average Employee Count per Industry")+
+  xlab("Industry")+
+  ylab("Average Employee Counts")+
+  theme(axis.text.x=element_text(angle = 65, vjust=0.6))+
+  geom_text(aes(y=avgemp, label=round(avgemp,3)), color="white", size=4)
+
+```
+
+
+
+## Answer 2 Option 2
+
+```{r fig4, fig.height=15, fig.width= 20, fig.align='center'}
+
+# Filter the third state(NY) for full available data
+ny_2 <- inc[complete.cases(inc), ]%>%
+  filter(State=="NY")
+
+# boxplot with mean and median of employees count within industry
+ggplot(ny_2, aes(x=Industry, y=Employees))+
+  geom_boxplot(outlier.colour = NA)+
+  coord_flip(ylim=c(0,1500))+
+  stat_summary(fun.y="mean", size=4, geom = "point", aes(color="Mean"))+
+  stat_summary(fun.y="median", size=3, geom = "point", aes(color="Median"))+
+  labs(title="Distribution of the Industries Based on Employee Count")+
+  xlab("Industry")+
+  ylab("Employees")
+
+```
+
+
+
+## Question 3
+
+Now imagine you work for an investor and want to see which industries generate the most revenue per employee. Create a chart that makes this information clear. Once again, the distribution per industry should be shown.
+
+```{r fig5, fig.height=10, fig.width= 15, fig.align='center'}
+# calculate total revenue, total employee and revenue for employee
+emp_revenue <- inc[complete.cases(inc), ]%>%
+  group_by(Industry) %>%
+  summarize(total_revenue=sum(Revenue), total_employee=sum(Employees)) %>%
+  mutate(rev_per_emp=total_revenue/total_employee)
+
+# create bar plot of industry distribution based on revenue per employee
+ggplot(emp_revenue, aes(x=reorder(Industry, -rev_per_emp), y=rev_per_emp))+
+  geom_bar(stat="identity", width=0.5, fill="tomato2")+
+  coord_flip()+
+  labs(title="Distribution of the Industries Based on Revenue Per Employee")+
+  xlab("Industry")+
+  ylab("Revenue Per Employee")+
+  theme(axis.text.x=element_text(vjust=0.6))
+
+```
+
+
+
+
+
