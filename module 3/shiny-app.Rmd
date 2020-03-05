@@ -1,0 +1,224 @@
+---
+title: "Module 3 Shiny App"
+author: "Anil Akyildirim"
+date: "3/4/2020"
+output: html_document
+---
+
+# Introduction
+
+In this assignment, we have been provided data around mortality from all 50 states and the District of Columbia. We will be using R shiny package. We already created an account in https://www.shinyapps.io/ and set our name, token and password.
+
+## Question 1**
+
+As a researcher, you frequently compare mortality rates from particular causes across different States. You need a visualization that will let you see (for 2010 only) the crude mortality rate, across all States, from one cause (for example, Neoplasms, which are effectively cancers). Create a visualization that allows you to rank States by crude mortality for each cause of death. 
+
+
+```{r}
+# load libraries
+library(shiny)
+library(rsconnect)
+library(ggplot2)
+library(dplyr)
+library(plotly)
+```
+
+
+```{r}
+# authorization of the account
+rsconnect::setAccountInfo(name='akyneal', token='27031347FE166FAC8380BE849FA46ADE', secret='lnyro+EJUmCTyGMsIJ/+Q0mRcjMEkOE/Ky0Sy7sb')
+
+
+```
+
+
+We can follow the shiny app tutorial series provided by RStudio in order to create our shiny app. (Reference: (https://shiny.rstudio.com/tutorial/written-tutorial/lesson1/).
+
+Structure of shiny app contains three components
+
+*user unterface object(ui)
+
+*server function (server)
+
+*call to the shinnyApp function
+
+With ui object we are going to set up the layout and appearance of the shiny app, with server function we are going to provide certain functions to compile the app, and finally with shinyApp function we are going to create the shiny app using ui and server. 
+
+```{r}
+# load the dataset in R and review
+df <- read.csv("https://raw.githubusercontent.com/charleyferrari/CUNY_DATA_608/master/module3/data/cleaned-cdc-mortality-1999-2010-2.csv")
+head(df)
+
+```
+
+```{r}
+
+#filter data based to make sure we are getting mortality for 2010 only and for particular cause
+
+infectious_diseases <- filter(df, 
+                              Year == 2010 & ICD.Chapter == 'Certain infectious and parasitic diseases')
+
+infectious_diseases <- infectious_diseases %>% arrange(Crude.Rate)
+
+head(infectious_diseases)
+```
+
+```{r fig1, fig.height=10, fig.width= 15, fig.align='center'}
+# creating the visualization using ggplot to make sure it gives me the result as we expect for one cause
+
+ggplot(infectious_diseases, aes(x=reorder(State, -Crude.Rate), y=Crude.Rate))+
+  geom_col(fill="tomato3")+
+  coord_flip()+
+  geom_text(aes(label=Crude.Rate),
+            size=3,
+            hjust=-0.5,
+            color="black")+
+  xlab("State")+
+  ylab("Crude Rate")+
+  theme(axis.text.x = element_text(angle=65, vjust=0.6))
+
+```
+
+Below, with ui, we will set up the header title, set up sidepanel for user to select the Cause (ICD Chapter in the dataset), default cause. We will also set up the main panel where bar plot will display based on the selected cause. On the server function, we will define the filter of data function based on cause and year 2010, the actual bar plot using ggplot.
+
+```{r}
+# define UI layout for the shiny app
+
+ui <- fluidPage(
+  headerPanel('State Moratlity Rate by Cause'),
+  sidebarPanel(
+    selectInput('Cause', 'Cause', unique(df$ICD.Chapter),
+                selected='Certain infectious and parasitic diseases') #will display default cause
+    
+  ),
+  mainPanel(
+    htmlOutput(outputId = 'selection'),
+    plotOutput('plot1', height="auto"),
+    h6("The Crude Mortality Rate across all States")
+  )
+)
+
+# define server logic for data and input
+
+server <- shinyServer(function(input, output, session) {
+  selectedData <- reactive({
+    df %>% filter(ICD.Chapter == input$Cause & Year == 2010 )
+  })
+  
+  output$selection <- renderText({
+    paste('<b> Crude rate for: </b>', input$Cause)
+  })
+  
+  output$plot1 <- renderPlot({
+    
+    ggplot(selectedData(), aes(x=reorder(State, -Crude.Rate), y=Crude.Rate)) +
+      geom_col(fill = "#ffa600") +
+      coord_flip() +
+      geom_text(aes(label=Crude.Rate),
+                size=3,
+                hjust=-0.2,
+                color="#003f5c") +
+      xlab("State") +
+      ylab("Crude Rate") +
+      theme(panel.background = element_blank())
+  }, height = function() {
+    session$clientData$output_plot1_width}
+  )
+})
+
+shinyApp(ui = ui, server = server)
+
+
+
+```
+
+
+## Question 2
+
+Often you are asked whether particular States are improving their mortality rates (per cause) faster than, or slower than, the national average. Create a visualization that lets your clients see this for themselves for one cause of death at the time. Keep in mind that the national average should be weighted by the national population. 
+
+
+
+```{r}
+# creating dataframe with national average mortality rate
+nation <- df %>%
+  select(ICD.Chapter, Year, State, Deaths, Population, Crude.Rate) %>%
+  mutate(Crude.Rate = round((sum(Deaths) / sum(Population)) * 10^5, 1)) %>%
+  mutate(State = "National") %>%
+  select(ICD.Chapter, Year, Crude.Rate, State) %>%
+  group_by(ICD.Chapter, Year)
+
+nation$State <- as.character(nation$State)
+head(nation)
+
+
+```
+
+```{r}
+# creating the dataframe with each state mortality rate
+state <- df %>%
+  select(ICD.Chapter, Year, Crude.Rate, State)
+
+head(state)
+```
+
+
+
+```{r}
+# combanining them into one dataframe
+
+df2 <- union_all(state, nation)
+head(df2)
+
+```
+
+```{r}
+
+#creating layout with ui - user inputs State and Cause
+ui <- fluidPage(
+  headerPanel('State Mortality Rates'),
+  sidebarPanel(
+    selectInput('State', 'State', unique(df2$State), selected='NY'),
+    selectInput('ICD.Chapter', 'Cause', unique(df2$ICD.Chapter), selected='Certain infectious and parasitic diseases')
+  ),
+  mainPanel(
+    plotlyOutput('plot1')
+  )
+)
+
+# creating function to plot (using plotly this time) with server
+server <- function(input, output, session) {
+  
+  nationalData <- reactive({
+    nation %>%
+      filter(ICD.Chapter == input$ICD.Chapter)
+  })
+  
+  statedata <- reactive({
+    df3 <- df2 %>%
+      filter(State == input$State, ICD.Chapter == input$ICD.Chapter)
+  })
+  
+  combined <- reactive({
+    merge(x = nationalData(), y = statedata(), all = TRUE)
+  })
+  
+  output$plot1 <- renderPlotly({
+    
+    df3 <- df2 %>%
+      filter(State == input$State, ICD.Chapter == input$ICD.Chapter)
+    
+    plot_ly(combined(), x = ~Year, y = ~Crude.Rate, color = ~State, type='scatter',
+            mode = 'lines')
+  })
+  
+}
+
+shinyApp(ui = ui, server = server)
+
+
+
+
+```
+
+
