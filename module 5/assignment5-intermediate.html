@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>Data 608 Assignment 5- Intermediate</title>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/d3/4.7.4/d3.min.js"></script>
+    </head>
+    <body>
+        <h1>
+            Data 608 Assignment 5- Intermediate- Anil Akyildirim
+        </h1>
+        <h2>
+            Write a function to load the presidents.csv data and display the data as an html table and write a function that will return that president's height and weight when type it in.
+        </h2>
+    <script type="text/javascript">
+    //www.tutorialsteacher.com/d3js/loading-data-from-file-in-d3js
+        function get_data(){
+            d3.csv("https://raw.githubusercontent.com/anilak1978/data608/master/module%205/presidents.csv", function(data) {
+                var row_data = ""; 
+                data.forEach(function(d) {
+                    row_data = row_data + 
+                    "<tr>" + 
+                    "<td>" + d.Name + "</td>" + 
+                    "<td>" + d.Height + "</td>" + 
+                    "<td>" + d.Weight + "</td>" + "</tr>"
+                });
+                display_table(row_data); 
+            });
+        }
+
+        function display_table(row_data){
+            var t = document.getElementById("target");
+            t.innerHTML = "<table>" + row_data + "</table>"; 
+        }
+
+        function search_president(name){
+            d3.csv("https://raw.githubusercontent.com/anilak1978/data608/master/module%205/presidents.csv", function(data) {
+            var selected_object = data.filter(function(d) 
+            { 
+                if (d["Name"].toLowerCase() == name.toLowerCase()) 
+                { 
+                    return d;
+                } 
+            });
+            });
+        }
+
+    function president_check(){
+        search_president(document.getElementById('name').value);
+    }
+    </script>
+
+<script type="text/javascript">
+    get_data()
+</script>
+
+<div id="target"></div>
+<p>
+<form>
+    <input id="name" type="string" size="50">
+    <input type="button" value="President's Weight and Heitgh" onClick="president_check();">
+</form>
+</p>
+
+</body>
+</html>
