@@ -1,0 +1,12 @@
+name: Sessionapp
+title: Sessionapp
+username:
+account: akyneal
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2294224
+bundleId: 3143436
+url: https://akyneal.shinyapps.io/Sessionapp/
+when: 1589394878.35104
+asMultiple: FALSE
+asStatic: FALSE

@@ -1,0 +1,388 @@
+---
+title: "Final Project Data 608"
+author: Anil Akyildirim
+date: "5/6/2020"
+output:
+  html_document:
+    code_download: yes
+    code_folding: hide
+    highlight: pygments
+    number_sections: yes
+    theme: flatly
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+
+# Introduction
+
+Google Analytics is a well known Web Analytics Platform that allows businesses to track the consumer acquisition, engagement, beahvior and conversion through their website. Even though it might be considered as a basic platform, it follows the standard Data Science process where it collects data from website user's browser, transforms and cleans based on business input and provides analysis of the data via the Google Analytics User Interface. In my final project, I decided to leverage Google Analytics Data to solve one of the most commont problems Marketing Departments within businesses solve everyday. The high level problem statement is "How should our business allocate their Marketing Budget on weekly, daily, yearly or even daily basis?" . In order to explore this problem further, we would need to look at the Google Analytics Data in detail for Unique visitors, Sessions, Channel Grouping, Transaction Revenue and New vs Returning Consumer. Our purpose of this analysis is to provide actionable insights to the marketing team so they can use their budget based on the business conversion goals. Instead of using a Power Point Presentation, we will build an engaging analysis and shiny app that works with our Google Analytics Data. 
+
+
+#  About the Data
+
+In this case, since I wasnt able to access any real business data, I decided to leverage a Google Analytics Customer Revenue Prediction Competion data available by Kaggle. The full Data set can be found here: ( https://www.kaggle.com/c/ga-customer-revenue-prediction/data ) . The raw Toogle Analytics data between the dates of August 1st 2016 and April 30th 2018, for the Google Merchandise store. YOu can access to the Google Merchandise Store data through the Google Analytics Demo Account (https://analytics.google.com/analytics/web/?utm_source=demoaccount&utm_medium=demoaccount&utm_campaign=demoaccount#/report-home/a54516992w87479473p92320289). 
+
+##Data Fields
+
+**fullVisitorId- A unique identifier for each user of the Google Merchandise Store.**
+
+**channelGrouping - The channel via which the user came to the Store.**
+
+**date - The date on which the user visited the Store.**
+
+**device - The specifications for the device used to access the Store.**
+
+**geoNetwork - This section contains information about the geography of the user.**
+
+**socialEngagementType - Engagement type, either "Socially Engaged" or "Not Socially Engaged".**
+
+**totals - This section contains aggregate values across the session.**
+
+**trafficSource - This section contains information about the Traffic Source from which the session originated.**
+
+**visitId - An identifier for this session. This is part of the value usually stored as the _utmb cookie. This is only unique to the user. For a completely unique ID, you should use a combination of fullVisitorId and visitId.**
+
+**visitNumber - The session number for this user. If this is the first session, then this is set to 1.**
+
+**visitStartTime - The timestamp (expressed as POSIX time).**
+
+**hits - This row and nested fields are populated for any and all types of hits. Provides a record of all page visits.**
+
+**customDimensions - This section contains any user-level or session-level custom dimensions that are set for a session. This is a repeated field and has an entry for each dimension that is set.**
+
+**totals - This set of columns mostly includes high-level aggregate data.**
+
+# Data Collection  
+
+## Load Libraries
+
+```{r}
+
+library("readxl")
+library(shiny)              
+#library(googleAuthR)        # To prompt for authentication by the user
+#library(googleAnalyticsR)   # For the pulling of the data
+library(tidyverse)          
+library(scales)
+library(googleCharts)
+library(dplyr)
+library(lubridate)
+require(shinydashboard)
+library(ggplot2)
+library(plotly)
+library(stringr)
+library(knitr)
+library(kableExtra)
+library(knitr)
+library(corrplot)
+library(ggplot2)
+library(jsonlite)
+library(scales)
+library(lubridate)
+library(repr)
+library(ggrepel)
+library(gridExtra)
+library(tidyr)
+library(psych)
+library(ggpubr)
+library(ggcorrplot)   
+
+
+
+```
+
+For this purpose of this project, we will only use the train data and will not touch the test data provided by Kaggle. 
+
+```{r}
+
+ga_train <- read.csv("train.csv")
+
+
+```
+
+
+# Data Cleaning and Transformation
+
+
+As we can see our dataset is a mess. It is the raw data that is pulled in from Big Query in csv format and needs to be cleaned in order for us to perform any analysis and visualization. The columns device, geoNetwork, totals and Traffic Source has multiple key value pairs. 
+
+
+```{r}
+
+#JSON columns are "device", "geoNetwork", "totals", "trafficSource"
+
+tr_device <- paste("[", paste(ga_train$device, collapse = ","), "]") %>% fromJSON(flatten = T)
+tr_geoNetwork <- paste("[", paste(ga_train$geoNetwork, collapse = ","), "]") %>% fromJSON(flatten = T)
+tr_totals <- paste("[", paste(ga_train$totals, collapse = ","), "]") %>% fromJSON(flatten = T)
+tr_trafficSource <- paste("[", paste(ga_train$trafficSource, collapse = ","), "]") %>% fromJSON(flatten = T)
+
+
+#Combine to make the full training and test sets
+ga_train <- ga_train %>%
+    cbind(tr_device, tr_geoNetwork, tr_totals, tr_trafficSource) %>%
+    select(-device, -geoNetwork, -totals, -trafficSource)
+    
+
+#Remove temporary tr_ and te_ sets
+rm(tr_device)
+rm(tr_geoNetwork)
+rm(tr_totals)
+rm(tr_trafficSource)
+
+
+# convert some character variables to categorical variables
+factorVars <- c("channelGrouping", "browser", "operatingSystem", "deviceCategory", "country")
+ga_train[, factorVars] <- lapply(ga_train[, factorVars], as.factor)
+
+#converting the date variable from integer to the date format
+ga_train$date <- ymd(ga_train$date)
+
+#converting character variables into numeric
+numVars <- c("visits", "hits", "bounces", "pageviews", "newVisits")
+ga_train[, numVars] <- lapply(ga_train[, numVars], as.integer)
+ga_train$transactionRevenue <- as.numeric(ga_train$transactionRevenue)
+
+#converting visit start times to POSIXct
+ga_train$visitStartTime <- as.POSIXct(ga_train$visitStartTime, tz="UTC", origin='1970-01-01')
+
+
+```
+
+
+
+Let's look at the structure and descriptive statistic of our data.
+
+
+
+```{r}
+# look at descriptive statistics
+metastats <- data.frame(describe(ga_train))
+metastats <- tibble::rownames_to_column(metastats, "STATS")
+metastats["pct_missing"] <- round(metastats["n"]/903653, 3)
+head(metastats)
+```
+
+
+```{r}
+#summary of the dataset
+summary(ga_train)
+
+```
+
+
+We have 903653 obvervations, with 55 variables. SessionId is the unique identifier for each user. We can see that the number of distinct sessionid is almost same as the number of observations. 
+
+Based on the Channel Grouping, we are acquiring majority of the users via Organic Search, followed by Social. Majority of the visitors are using Chrome as their browser, using Desktop as a device and are from United Staes.  
+
+Let's look at the missing values in more detail.
+
+```{r}
+
+colSums(is.na(ga_train))
+
+```
+
+We have a lot of missing values in campaigncode, transactionrevenue and some other variables. For the purpose of this project, we wont be handling these missing values. As we can see Channel Grouping variable which gives us the variety of Marketing Channels that we acquire the users from dont have any missing values along with sessionid, visit number.
+
+```{r}
+#Let's look at our columns
+head(ga_train)
+
+
+```
+
+# Data Exploration
+
+Let's further perform explanatory data analysis to this data set.
+
+```{r fig1, fig.height=8, fig.width= 15, fig.align='center'}
+
+c <- ga_train %>% 
+  ggplot(aes(channelGrouping)) +
+  geom_bar(aes(fill=channelGrouping), position = position_dodge())
+
+  
+se <- ga_train %>% 
+  ggplot(aes(socialEngagementType)) +
+  geom_bar(aes(fill=channelGrouping), position = position_dodge())
+
+
+d <- ga_train %>% 
+  ggplot(aes(deviceCategory)) +
+  geom_bar(aes(fill=channelGrouping), position = position_dodge())
+
+
+co <- ga_train %>% 
+  ggplot(aes(continent)) +
+  geom_bar(aes(fill=channelGrouping), position = position_dodge())
+
+
+
+me <- ga_train %>% 
+  ggplot(aes(medium)) +
+  geom_bar(aes(fill=channelGrouping), position = position_dodge())
+
+
+ggarrange(c, se, d, co, me, nrow = 5)
+
+```
+
+We can see that overall Organic Search is providing the biggest consumer acquisition for the Google Store, next channel is Social followed by Referral. I think this makes sense as Organic Search is ruled by Google's Search Algorithm and they dont neccessarily need any paid or display media for user acquisition.
+
+
+Let's look at Sessions and Transaction Revenue, one of the usual business goals of an ecommerce business.
+
+```{r}
+# Assign $0 value to the TransactionRevenu that has missing values.
+ga_train$transactionRevenue[is.na(ga_train$transactionRevenue)] <- 0
+
+y <- ga_train$transactionRevenue #saving original values in a vector
+ga_train$transactionRevenue <- ga_train$transactionRevenue/1000000
+
+
+ga_train %>% filter(transactionRevenue >0) %>% summarize('number of transactions'=n(), 'total revenues train set'=sum(transactionRevenue))
+
+
+```
+
+
+We dont neccessarily need to see the transaction values that are 0 or less than $1,000
+
+
+```{r}
+
+range(ga_train %>% select(transactionRevenue) %>% filter(transactionRevenue !=0))
+ga_train %>% filter(transactionRevenue>=1000) %>% summarize('number of transactions with at least 1000 USD revenues'=n(), 'sum revenues of transactions with at least 1000 USD revenues'=sum(transactionRevenue))
+
+
+```
+
+
+
+
+
+```{r fig13, fig.height=10, fig.width= 15, fig.align='center'}
+
+z1 <- ga_train %>% 
+  group_by(date) %>% 
+  summarise(dailySessions = n()) %>%
+  ggplot(aes(x=date, y=dailySessions)) + geom_line(col='plum') +
+  scale_y_continuous(labels=comma) + geom_smooth(col='tomato') +
+  labs(x="", y="Sessions per Day") + scale_x_date(date_breaks = "1 month", date_labels = "%b %d")
+
+z2 <- ga_train %>% 
+  group_by(date) %>% 
+  summarise(dailyRevenue = sum(transactionRevenue)) %>%
+  ggplot(aes(x=date, y=dailyRevenue)) + geom_line(col='plum') +
+  scale_y_continuous(labels=comma) + geom_smooth(col='tomato') +
+  labs(x="", y="Daily Revenues (USD)") + scale_x_date(date_breaks = "1 month", date_labels = "%b %d")
+
+grid.arrange(z1,z2)
+
+```
+
+We can see that sessions have increased starting October and peaked in November, however went back to normal in January. When we compare the Daily Revenus within the same time frame we see that it stayed flat. This means, users are engaging with the Google eStore, however not contributing to the purchase.
+
+Let's analyze further to see when consumers are engaging with the website the most.
+
+
+```{r}
+# creating this function to plot the next two visualizations easily
+
+plotSessions <- function(dataframe, factorVariable, topN=10) {
+    var_col <- enquo(factorVariable)
+    dataframe %>% count(!!var_col) %>% top_n(topN, wt=n) %>%
+    ggplot(aes_(x=var_col, y=~n, fill=var_col)) +
+    geom_bar(stat='identity')+
+    scale_y_continuous(labels=comma)+
+    labs(x="", y="number of sessions")+
+    theme(legend.position="none")
+    }
+
+#also creating a function to plot transactionRevenue for a factorvariable
+plotRevenue <- function(dataframe, factorVariable, topN=10) {
+    var_col <- enquo(factorVariable)
+    dataframe %>% group_by(!!var_col) %>% summarize(rev=sum(transactionRevenue)) %>% filter(rev>0) %>% top_n(topN, wt=rev) %>% ungroup() %>%
+    ggplot(aes_(x=var_col, y=~rev, fill=var_col)) +
+    geom_bar(stat='identity')+
+    scale_y_continuous(labels=comma)+
+    labs(x="", y="Revenues (USD)")+
+    theme(legend.position="none")
+    }
+
+
+```
+
+
+
+```{r}
+# create weekday
+ga_train$weekday <- wday(ga_train$date, label=TRUE)
+
+
+```
+
+
+
+```{r fig14, fig.height=10, fig.width= 15, fig.align='center'}
+
+options(repr.plot.height=4)
+week1 <- plotSessions(ga_train, weekday)
+week2 <- plotRevenue(ga_train, weekday)
+grid.arrange(week1, week2)
+
+
+
+```
+
+```{r fig15, fig.height=10, fig.width= 15, fig.align='center'}
+
+
+ga_train$month <- month(ga_train$date, label=TRUE)
+
+
+m1 <- plotSessions(ga_train, month, 12)
+m2 <- plotRevenue(ga_train, month, 12)
+grid.arrange(m1, m2)
+
+
+
+
+```
+
+Based on this analysis, we can see that users engage with the website the most on Tuesday and Wednesday and contribute to the Revenue the most on Tuesday. We had a spike in number of sessions on November, however didnt contribute to the Revenue. However, when we look at the December, even though we didnt have as much user engagement compare to November and October, we have the biggest contribution to the Revenue. 
+
+Let's look at our Marketing Channels and their contribution to the user engagement and Revenue since that is what we want to explore in terms of solving business problem.
+
+
+```{r fig16, fig.height=10, fig.width= 15, fig.align='center'}
+
+#adding reordering of x manually
+sessionOrder <- ga_train %>% 
+  count(channelGrouping) %>% 
+  top_n(10, wt=n) %>% 
+  arrange(desc(n))
+sessionOrder <- sessionOrder$channelGrouping
+
+channel1 <- plotSessions(ga_train, channelGrouping) + scale_x_discrete(limits=sessionOrder)
+channel2 <- plotRevenue(ga_train, channelGrouping) + scale_x_discrete(limits=sessionOrder)
+grid.arrange(channel1, channel2)
+
+
+
+```
+
+We can see that Organic Search has the highest number of Sessions however does not bring the biggest Revenue. Even thogh Referral has the 4th place in terms of User Engagement with the site, we see that it brings the highest contribution to the Revenue by far.
+
+# Conclusion
+
+
+Even though as businesses we would like to have higher user acqusition and engagement, that doesnt always means that this meets their business goals. Depending on the website, business goals can mean content consumption, lead generation or higher purchase conversion which is the case in our analysis. We may not neccessarily want to have higher sessions but rather we would like to have higher unique visitors or higher revenue and allcote our Channel Distribution budgets accordingly.
+
+Finally, we have complied these analysis into the below shiny apps to further present the visualization of Channel Performance. 
+
+References: https://www.youtube.com/watch?v=4Ht_vEXJ4wo : Create a Talking GA Shiny App, https://medium.com/compassred-data-blog/google-analytics-dashboards-in-r-shiny-fc8e0ebcef2c : Google Analytics Dashboard in R. 
+

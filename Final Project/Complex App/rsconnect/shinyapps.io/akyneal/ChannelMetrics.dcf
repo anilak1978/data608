@@ -1,0 +1,12 @@
+name: ChannelMetrics
+title: ChannelMetrics
+username:
+account: akyneal
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2294645
+bundleId: 3143731
+url: https://akyneal.shinyapps.io/ChannelMetrics/
+when: 1589399831.08165
+asMultiple: FALSE
+asStatic: FALSE

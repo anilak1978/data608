@@ -1,0 +1,12 @@
+name: Revenueapp
+title: Revenueapp
+username:
+account: akyneal
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2294402
+bundleId: 3143662
+url: https://akyneal.shinyapps.io/Revenueapp/
+when: 1589398852.23153
+asMultiple: FALSE
+asStatic: FALSE
